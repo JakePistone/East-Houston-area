@@ -51,6 +51,11 @@
         .exclusion-item{border-bottom:1px solid #eee; padding:5px; margin-bottom:5px;}
         .exclusion-item button{background:#e63946; color:#fff; padding:4px 8px; border:none; border-radius:4px; cursor:pointer; font-size:12px;}
         .exclusion-item button:hover{background:#d63031;}
+        #data-table-panel{display:none; position:absolute; top:100px; left:20px; z-index:1200; background:#fff; padding:15px; border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.12); max-width:90vw; max-height:70vh; overflow:auto; font-size:14px;}
+        #data-table-panel.show{display:block;}
+        #properties-table{width:100%; border-collapse:collapse; margin-top:10px;}
+        #properties-table th, #properties-table td {border:1px solid #ddd; padding:8px; text-align:left;}
+        #properties-table th {background-color:#f2f2f2; font-weight:bold;}
     </style>
 </head>
 <body>
@@ -73,6 +78,7 @@
         </div>
     </div>
     <div class="dropdown-container">
+        <button id="view-table">View Data Table</button>
         <button id="manage-exclusions">Manage Exclusions</button>
         <button id="send-excluded">Send Excluded List</button>
         <button id="toggle-distances">Show Distances</button>
@@ -81,6 +87,25 @@
     <div id="exclusions-panel">
         <h3 style="margin-top:0;">Excluded Properties</h3>
         <div id="exclusions-list"></div>
+    </div>
+    <div id="data-table-panel">
+        <h3 style="margin-top:0;">Properties Data Table</h3>
+        <table id="properties-table">
+            <thead>
+                <tr>
+                    <th>Property Name</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                    <th>Market</th>
+                    <th>Acres</th>
+                    <th>Price</th>
+                    <th>$/SF</th>
+                    <th>Link</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
     </div>
     <div id="map">
         <div class="map-title" id="map-title">NIOS Land Map</div>
@@ -177,6 +202,34 @@
             panel.classList.toggle('show');
             updateExclusionsList();
         };
+        // View Data Table button
+        document.getElementById('view-table').onclick = function() {
+            const panel = document.getElementById('data-table-panel');
+            panel.classList.toggle('show');
+            if (panel.classList.contains('show')) {
+                updateDataTable();
+            }
+        };
+        // Function to update data table
+        function updateDataTable() {
+            const tbody = document.querySelector('#properties-table tbody');
+            tbody.innerHTML = '';
+            properties.forEach(p => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${p.name}</td>
+                    <td>${p.lat.toFixed(6)}</td>
+                    <td>${p.lng.toFixed(6)}</td>
+                    <td>${p.market}</td>
+                    <td>${p.ac}</td>
+                    <td>${p.price}</td>
+                    <td>${p.psf}</td>
+                    <td><a href="${p.link}" target="_blank">View</a></td>
+                    <td>${p.notes || ''}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
         // Send Excluded List button
         document.getElementById('send-excluded').onclick = function() {
             if (excluded.size === 0) {
@@ -210,7 +263,8 @@
                         ac: row["Acres"]||row["ac"]||"N/A",
                         price: row["Price"]||"N/A",
                         psf: row["$/SF"]||row["$/sf"]||"N/A",
-                        link: row["Link"]||row["link"]||"#"
+                        link: row["Link"]||row["link"]||"#",
+                        notes: row["Notes"] || ""
                     }))
                     .filter(p=>!isNaN(p.lat)&&!isNaN(p.lng));
                 if(properties.length===0){
