@@ -46,6 +46,11 @@
             background:rgba(255,255,255,0.95);padding:4px 8px;border-radius:6px;border:1px solid rgba(0,0,0,0.08);
             font-weight:700;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);
         }
+        #exclusions-panel{display:none; position:absolute; top:100px; right:20px; z-index:1200; background:#fff; padding:15px; border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.12); max-width:300px; max-height:400px; overflow-y:auto; font-size:14px;}
+        #exclusions-panel.show{display:block;}
+        .exclusion-item{border-bottom:1px solid #eee; padding:5px; margin-bottom:5px;}
+        .exclusion-item button{background:#e63946; color:#fff; padding:4px 8px; border:none; border-radius:4px; cursor:pointer; font-size:12px;}
+        .exclusion-item button:hover{background:#d63031;}
     </style>
 </head>
 <body>
@@ -72,6 +77,10 @@
         <button id="send-excluded">Send Excluded List</button>
         <button id="toggle-distances">Show Distances</button>
         <button id="toggle-satellite">Satellite</button>
+    </div>
+    <div id="exclusions-panel">
+        <h3 style="margin-top:0;">Excluded Properties</h3>
+        <div id="exclusions-list"></div>
     </div>
     <div id="map">
         <div class="map-title" id="map-title">NIOS Land Map</div>
@@ -124,6 +133,70 @@
                   a=Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
             return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
         }
+        // Function to generate popup content with dynamic checkbox state
+        function popupContent(i) {
+            const p = properties[i];
+            const checked = excluded.has(i) ? 'checked' : '';
+            return `
+                <div style="min-width:180px"><b>${p.name}</b><br/>
+                Market: <strong>${p.market}</strong><br/>Acres: ${p.ac}<br/>Price: ${p.price}<br>$/SF: ${p.psf}<br/>
+                <a href="${p.link}" target="_blank" style="color:#1a73e8">View Details</a><br/><br/>
+                <label style="font-weight:600"><input type="checkbox" class="exclude-checkbox" data-index="${i}" ${checked}> Exclude</label>
+                </div>`;
+        }
+        // Function to update exclusions list in panel
+        function updateExclusionsList() {
+            const list = document.getElementById('exclusions-list');
+            list.innerHTML = '';
+            if (excluded.size === 0) {
+                list.innerHTML = '<p>No excluded properties.</p>';
+                return;
+            }
+            let html = '';
+            let count = 1;
+            excluded.forEach(i => {
+                const p = properties[i];
+                html += `<div class="exclusion-item">
+                    <div><b>${count++}. ${p.name}</b></div>
+                    <div>Market: ${p.market}</div>
+                    <div>Acres: ${p.ac}</div>
+                    <button onclick="removeExclusion(${i})">Remove Exclusion</button>
+                </div>`;
+            });
+            list.innerHTML = html;
+        }
+        // Global function to remove exclusion
+        window.removeExclusion = function(i) {
+            excluded.delete(i);
+            updateMap();
+            updateExclusionsList();
+        };
+        // Manage Exclusions button
+        document.getElementById('manage-exclusions').onclick = function() {
+            const panel = document.getElementById('exclusions-panel');
+            panel.classList.toggle('show');
+            updateExclusionsList();
+        };
+        // Send Excluded List button
+        document.getElementById('send-excluded').onclick = function() {
+            if (excluded.size === 0) {
+                alert('No excluded properties to send.');
+                return;
+            }
+            let body = 'Excluded Properties List:\n\n';
+            let count = 1;
+            excluded.forEach(i => {
+                const p = properties[i];
+                body += `${count++}. ${p.name} - ${p.market} (${p.ac} acres)\n`;
+                if (p.price !== 'N/A') body += `   Price: ${p.price}\n`;
+                if (p.psf !== 'N/A') body += `   $/SF: ${p.psf}\n`;
+                body += '\n';
+            });
+            body += '\nGenerated on: ' + new Date().toLocaleString('en-US', {timeZone: 'America/Chicago'});
+            const subject = 'Excluded Properties List - NIOS Land Map';
+            const url = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent('jake@reservecappartners.com')}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.open(url, '_blank');
+        };
         // MAIN PROPERTY LOADING — MAP LOADS 100%
         Papa.parse('https://docs.google.com/spreadsheets/d/e/2PACX-1vTdmHlBnanLuTmq25cEpRDr0umbJ1NHIXeEZp0izQ7ufKeOWxSGObg2bGRtFEBxpu_wsgT_Eeq2Qiu6/pub?gid=0&single=true&output=csv',{
             download:true,header:true,skipEmptyLines:true,
@@ -148,13 +221,7 @@
                 properties.forEach((p,i)=>{
                     const icon=L.divIcon({className:'',iconSize:[28,28],iconAnchor:[14,14],
                         html:`<div class="custom-marker-icon" style="background:${getColor(p.market)}">${i+1}</div>`});
-                    const popup=`
-                        <div style="min-width:180px"><b>${p.name}</b><br/>
-                        Market: <strong>${p.market}</strong><br/>Acres: ${p.ac}<br/>Price: ${p.price}<br>$/SF: ${p.psf}<br/>
-                        <a href="${p.link}" target="_blank" style="color:#1a73e8">View Details</a><br/><br/>
-                        <label style="font-weight:600"><input type="checkbox" class="exclude-checkbox" data-index="${i}"> Exclude</label>
-                        </div>`;
-                    markers[i]=L.marker([p.lat,p.lng],{icon}).bindPopup(popup).addTo(map);
+                    markers[i]=L.marker([p.lat,p.lng],{icon}).bindPopup(popupContent(i)).addTo(map);
                 });
                 map.fitBounds(L.latLngBounds(properties.map(p=>[p.lat,p.lng])).pad(0.25));
                 const sel=document.getElementById('property-selector');
@@ -222,6 +289,7 @@
                         const i=+e.target.dataset.index;
                         e.target.checked?excluded.add(i):excluded.delete(i);
                         updateMap();
+                        updateExclusionsList();
                     }
                     if(e.target.matches('#market-selector-list input[type="checkbox"]')){
                         const allChecked=[...document.querySelectorAll('#market-selector-list input[value]')].every(c=>c.checked);
@@ -234,6 +302,7 @@
                     updateMap();
                 };
                 updateMap();
+                updateExclusionsList();
                 document.getElementById('loading-indicator').style.display='none';
             }
         });
